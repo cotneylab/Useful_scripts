@@ -1,0 +1,15 @@
+## Example of script that submits pbs scripts and holds them in the queue until the previous job exits without errors
+# I got this from https://docs.loni.org/wiki/PBS_Job_Chains_and_Dependencies
+# which describes additional forms of dependencies
+
+cd ~/ANALYSIS/RNA-seq/2017-10-24_human_cf/combined_data/tophat_pipeline
+FIRST=$(qsub Trimmomatic_Fix.pbs)
+echo $FIRST
+SECOND=$(qsub -W depend=afterok:$FIRST Tophat_Fix.pbs)
+echo $SECOND
+THIRD=$(qsub -W depend=afterok:$SECOND Trimmed_Tophat_Fastqc.pbs)
+echo $THIRD
+FOURTH=$(qsub -W depend=afterok:$THIRD Final_Multiqc.pbs)
+echo $FOURTH
+FIFTH=$(qsub -W depend=afterok:$FOURTH samtools_fix_tag.pbs)
+echo $FIFTH
