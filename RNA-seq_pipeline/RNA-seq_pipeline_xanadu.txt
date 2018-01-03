@@ -1,0 +1,344 @@
+#####################################################################
+##### Instructions for RNA-seq pipeline on UCHC Xanadu cluster 	#####
+#####################################################################
+These instructions take you through: 
+1) Locating data in Basemount
+2) Preparing to transfer files from Basemount including making slurm scripts that can be run in a series to 
+	Transfer files from Basemount (basemount_fastq_transfer.slurm)
+	Merge flowcell lanes to give individual R1.fastq and R2.fastq files for each sample (fastq_merge.slurm)
+	Run Fastqc on the initial R1 and R2 Fastq files (merged_fastqc.slurm)
+	Run Multiqc from the Fastqc data to produce a single report (merged_multiqc.slurm)
+3) An optional set of scripts to combine data from different runs/batches which can also be run in a series to
+	Combine R1.fastq files of the same sample from different runs (make_zcat_reps_slurm.sh)
+	Combine R2.fastq files of the same sample from different runs (make_zcat_reps_slurm.sh)
+	Fastqc on the Combined fastq files (fastqc_combined.slurm)
+	Multiqc on the Combined fastq files to produce a single report (combined_multiqc.slurm)
+4) Processing and alignment of reads and fixing the strand identity
+	Requires Trimmomatic 0.36, Tophat2, samtools and DeepTools or bedtools
+	(make_human_trimmomatic_slurm.sh, make_human_tophat_slurm.sh, make_samtools_fix_tag_slurm.sh)
+5) Moving bigWigs to a web accessible folder 
+6) Some QC processes using RSeQC
+7) Preparing data for DESeq2 using FeatureCounts (make_sam_slurm.sh, 
+8) Identifying surrogate variables and specifying batch effects using ComBat/sva
+9) Running DESeq2 on multiple comparisons
+10) Generating volcano plots of comparisons
+11) Generating lists of upregulated and downregulated genes in multiple comparisons as well as 
+background lists that can be input into DAVID for GO Term enrichment analysis
+
+##### 		Updated 2018-01-02 by Andrea Wilderman				#####
+
+# 1 # Locate data through Basemount (example):
+
+module load basemount
+cd ~
+mkdir -p /tmp/user/basespace
+basemount /tmp/user/basespace
+cd /tmp/user/basespace
+ls -lh Runs
+
+# can also look at Projects
+ls -lh Projects
+
+# Now unmount
+cd ~
+basemount --unmount /tmp/user/basespace
+rm -r /tmp/user/
+
+# 2 # Prepare to transfer files from Basemount
+
+# Make a new directory for this data (example):
+cd ~/DATA/RNA-seq
+mkdir <Project_name>
+
+# Edit the slurm script basemount_fastq_transfer.slurm
+
+# Edit the slurm script fastq_merge.slurm
+
+# Optional: Move merged Fastq files from a previous run into this folder for a very large fastqc comparison
+
+# Make ANALYSIS directory
+cd ~/ANALYSIS/RNA-seq
+mkdir <Project_name>
+
+# Edit the slurm script merged_fastqc.slurm
+# Requires FastQC (installed locally as part of bcbio or edit script to load as module)
+
+# Edit the slurm script merged_multiqc.slurm
+# Requires MultiQC (installed locally as part of bcbio or edit script to load as module)
+
+# Run the following scripts as a chain, the dependent job will begin when and if the prior job completes successfully
+
+cd ~/DATA/RNA-seq/<Project_name>
+FIRST=$(sbatch --parsable basemount_fastq_transfer.slurm)
+echo $FIRST
+SECOND=$(sbatch --parsable --dependency=afterok:$FIRST fastq_merge.slurm)
+echo $SECOND
+cd ~/ANALYSIS/RNA-seq/<Project_name>
+THIRD=$(sbatch --parsable --dependency=afterok:$SECOND merged_fastqc.slurm)
+echo $THIRD
+FOURTH=$(sbatch --parsable --dependency=afterok:$THIRD merged_multiqc.slurm)
+echo $FOURTH
+
+# 3 # OPTIONAL: combine R1/R2.fastq files from different runs of the same biological sample
+
+# make a directory for combined data from runs
+mkdir -p ~/DATA/RNA-seq/<Project_name>/merged_cf/combined_data
+
+# make a list in that directory of all the names of samples by their 8-character sample name (e.g. AWIL_017)
+cd ~/ANALYSIS/RNA-seq/<Project_name>/ ; ls AWIL* | colrm 9 | sort | uniq > ~/DATA/RNA-seq/<Project_name>/merged_cf/combined_data/sample_list.txt
+
+# Edit and run the script make_zcat_reps_slurm.sh in the directory ~/DATA/RNA-seq/<Project_name>/merged_cf/combined_data
+
+# Edit fastqc_combined.slurm in the directory ~/DATA/RNA-seq/<Project_name>/merged_cf/combined_data
+
+# Edit combined_multiqc.slurm in the directory ~/DATA/RNA-seq/<Project_name>/merged_cf/combined_data
+
+# Run the slurm scripts in a dependency chain similar to above
+cd ~/DATA/RNA-seq/<Project_name>/merged_cf/combined_data
+FIRST=$(sbatch --parsable zcat_reps.slurm)
+echo $FIRST
+SECOND=$(sbatch --parsable --dependency=afterok:$FIRST fastqc_combined.slurm)
+echo $SECOND
+THIRD=$(sbatch --parsable --dependency=afterok:$SECOND combined_fastqc.slurm)
+echo $THIRD
+
+### Note before continuing:
+# If you are working with combined data from multiple runs, continue to work in the combined_data directory
+# If you do not have combined data, and are working with merged data from one run only, work in the merged_cf directory 
+# The examples from this point illustrate the latter
+###
+
+# 4 # 
+
+# make a sample_list.txt to place in the merged_cf directory
+cd ~/ANALYSIS/RNA-seq/<Project_name>/ ; ls AWIL* | colrm 9 | sort | uniq > ~/DATA/RNA-seq/<Project_name>/merged_cf/sample_list.txt
+
+# Edit and run script make_human_trimmomatic_slurm.sh
+# Requires Trimmomatic 0.36, available as a module; /isg/shared/apps/Trimmomatic/0.36
+# The Illumina adapters are located in /isg/shared/apps/Trimmomatic/0.36/adapters
+
+# Edit and run script make_human_tophat_slurm.sh
+# Requires a GTF annotation file, mine is located in ~/TOOLS/bcbio/genomes/Hsapiens/hg19/annotation
+# Also requires a bowtie2 index, mine is located in ~/TOOLS/bcbio/genomes/Hsapiens/hg19/bowtie2
+
+# Edit and run script make_samtools_fix_tag_slurm.sh
+# There are two options, run bamCoverage (only if DeepTools is able to run)
+# or if DeepTools cannot be run, use genomecov instead
+
+# 5 # Move Bigwigs to a web-accessible directory
+
+cd /tgc/TGCore_User_Data/WebData/cotney/hubs/CRANIOFACIAL_HUB/rnaseq 
+mkdir <Project_name>
+
+cd ~/ANALYSIS/RNA-seq/<Project_name>/merged_cf
+cp *.bw /tgc/TGCore_User_Data/WebData/cotney/hubs/CRANIOFACIAL_HUB/rnaseq/<Project_name>
+chmod -R 755 /tgc/TGCore_User_Data/WebData/cotney/hubs/CRANIOFACIAL_HUB/rnaseq/<Project_name>
+#make separate colors for positive (blue) and negative (red)
+cd /tgc/TGCore_User_Data/WebData/cotney/hubs/CRANIOFACIAL_HUB/rnaseq/<Project_name>
+ls *neg.bw | sed -e 's/.bw//g' |  awk '{ \
+print "track type=bigWig name=\x22"$1"\x22 description=\x22"$1"\x22 bigDataUrl=http://graveleylab.cam.uchc.edu/WebData/cotney/hubs/CRANIOFACIAL_HUB/rnaseq/<Project_name>/"$1".bw color=255,0,0 visibility=full yLineOnOff=on autoScale=off yLineMark=0 alwaysZero=off viewLimits=0:40 graphType=bar maxHeightPixels=128:75:11 windowingFunction=maximum"}' > <Project_name>_bigWig_tracks.txt
+ls *pos.bw | sed -e 's/.bw//g' |  awk '{ \
+print "track type=bigWig name=\x22"$1"\x22 description=\x22"$1"\x22 bigDataUrl=http://graveleylab.cam.uchc.edu/WebData/cotney/hubs/CRANIOFACIAL_HUB/rnaseq/<Project_name>/"$1".bw color=0,0,255 visibility=full yLineOnOff=on autoScale=off yLineMark=0 alwaysZero=off viewLimits=0:40 graphType=bar maxHeightPixels=128:75:11 windowingFunction=maximum"}' >> <Project_name>_bigWig_tracks.txt
+
+# 6 # RSeQC- section to be completed later
+
+# 7 # Prepare data for DESeq2 using FeatureCounts
+
+# Edit make_sam_slurm.sh
+# Edit make_featureCounts_slurm.sh
+# 	Requires a Gencode GTF file, mine is located in ~/TOOLS/bcbio/genomes/Hsapiens/hg19/annotation
+# 	in this example and the following optional step, the file containing counts is titled 
+# 	counts_RNAseq_hg19_GCv10_2_fr.txt
+# 	reflecting the assembly, gtf annotation and strandedness of the library
+
+# OPTIONAL: match and join your data to the 57 roadmap epigenomes
+# nano and remove first line of the file created by featureCounts.slurm to make headers match up
+# 	(the first line explains the operations performed and file names)
+# Download the file 57epigenomes.N.pc to a directory (I copied mine to ~/DATA/RNA-seq/ROADMAP/)
+# Edit match_to_RME.slurm
+
+# 8 # Identify surrogate variables and specifying batch effects using ComBat/sva
+
+# Create expression file
+## with bash, remove the .sorted.sam suffix from the sample names
+sed -i '' 's/.sorted.sam//g' nodot_sorted_counts_RNAseq_hg19_GCv10_2_fr.txt
+sed -i '' 's/.sorted.sam//g' new_joined_57epi_counts_RNAseq_hg19_GCv10_2rf.counts
+# 	either of these could be used as the counts file.  
+# 	In the example, nodot_sorted_counts_RNAseq_hg19_GCv10_2_fr.txt is the in-house data
+#	new_joined_57epi_counts_RNAseq_hg19_GCv10_2rf.counts is the in-house data joined to 57 epigenomes from Roadmap Epigenome
+
+# Make a phenodata.txt file with columns of sample information (in the example below, this is Carnegie stage, karyotype, etc)
+
+## Now switch to R
+# set up R on the cluster
+# install packages locally (only have to do once)
+srun -N 1 -p general --ntasks-per-node=1 --pty bash
+module load R/3.4.1
+R
+# now in R (check that it is version 3.4.1)
+
+source("https://bioconductor.org/biocLite.R")
+biocLite("sva")
+biocLite("pamr")
+biocLite("limma")
+biocLite("Biobase")
+biocLite("BiocGenerics")
+biocLite("DESeq2")
+biocLite("org.Hs.eg.db")
+biocLite("hexbin")
+biocLite("pheatmap")
+biocLite("PoiClaClu")
+biocLite("calibrate")
+
+# then quit and don't save
+
+# Re-enter R
+
+# make the expression set with the counts file
+CFexprsFile <- "~/ANALYSIS/RNA-seq/<Project_name>/merged_cf/<counts_file>"
+
+CFexprs <- as.matrix(read.table(CFexprsFile, header=TRUE, sep="\t",
+ row.names=1,
+ as.is=TRUE))
+
+# check that it made what you expect 
+class(CFexprs)
+dim(CFexprs)
+colnames(CFexprs)
+head(CFexprs[,1:5])
+
+CFminimalSet <- ExpressionSet(assayData=CFexprs)
+
+CFpDataFile <- "~/ANALYSIS/RNA-seq/<Project_name>/merged_cf/phenodata.txt"
+CFpData <- read.table(CFpDataFile,
+ row.names=1, header=TRUE, sep="\t")
+
+#check that it made what you expect
+dim(CFpData)
+rownames(CFpData)
+summary(CFpData)
+
+#check that the names are the same between expression data and pheno data
+all(rownames(CFpData)==colnames(CFexprs))
+
+# Turn the pData into phenoData
+
+CFmetadata <- data.frame(labelDescription=
+ c("Carnegie stage",
+ "Karyotype if known",
+ "Institutional collection site",
+ "RNA-seq batch"),
+ row.names=c("Carnegie_Stage", "Karyotype", "Collection_Site", "Batch"))
+
+CFphenoData <- new("AnnotatedDataFrame",
+ data=CFpData, varMetadata=CFmetadata)
+CFphenoData
+
+# build expression set with phenoData
+CFeSet <- ExpressionSet(assayData=CFexprs,
+ phenoData=CFphenoData)
+
+head (CFeSet)
+
+CFminimalSet <- ExpressionSet(assayData=CFexprs)
+
+head (CFminimalSet)
+
+# # Estimate surrogate variables
+library(sva)
+library(pamr)
+library(limma)
+library(DESeq2)
+
+# the normalized data for sva (but what is this normalization?)
+# and take normalized counts for which the average across samples is >1
+# the known variable is condition (carnegie stage)
+dat <- counts(ddsMat, normalized = TRUE)
+idx <- rowMeans(dat) > 1
+dat <- dat[idx,]
+mod <- model.matrix (~ condition, colData(ddsMat))
+mod0 <- model.matrix (~ 1, colData(ddsMat))
+n.sv = num.sv(dat,mod,method="leek")
+svseq <- svaseq(dat, mod, mod0)
+
+# outputs number of significant surrogate variables, use this information to edit CF_svseq.R
+
+# 9 # Run DESeq2 on multiple comparisons
+# Edit CF_svseq.R
+#	as written it will plot three different normalization types: log2+1, vsd and rld
+#	Make heatmaps of Euclidean distances and Poisson distances
+#	and generate a PCA plot
+# 	has sva built-in and will make plots of the surrogate variables
+# 	also set up to make differential expression comparisons by condition (in example, Carnegie stage)
+# 	set up to run comparisons on both the surrogate variable-adjusted and not adjusted data
+
+srun -N 1 -p general --ntasks-per-node=1 --pty bash
+
+module load R/3.4.1
+R
+Rscript --no-save --no-restore --verbose CF_svseq.R > 2017-12-16_CF_svseq.Rout 2>&1
+# which creates the screen output and any errors on the outfile and should generate the following files:
+# CF_compare_transformation.pdf
+# CF_compare_sample_distances.pdf
+# CF_Poisson_distance_heatmap.pdf
+# CF_PCA.pdf
+# CF_sva.pdf
+# CF_Tissue-CS17_v_CS13_diffexpr-results.csv
+# CF_Tissue-CS15_v_CS13_diffexpr-results.csv
+# CF_Tissue-CS14_v_CS13_diffexpr-results.csv
+# CF_Tissue-CS17_v_CS14_diffexpr-results.csv
+# CF_Tissue-CS17_v_CS15_diffexpr-results.csv
+# CF_Tissue-CS15_v_CS14_diffexpr-results.csv
+# sva_CF_Tissue-CS17_v_CS13_diffexpr-results.csv
+# sva_CF_Tissue-CS15_v_CS13_diffexpr-results.csv
+# sva_CF_Tissue-CS14_v_CS13_diffexpr-results.csv
+# sva_CF_Tissue-CS17_v_CS14_diffexpr-results.csv
+# sva_CF_Tissue-CS17_v_CS15_diffexpr-results.csv
+# sva_CF_Tissue-CS15_v_CS14_diffexpr-results.csv
+
+# 10 # Generate volcano plots of comparisons
+# # Volcano plots and upregulated gene lists 
+
+### CF_CS17_vs_CS13 as example
+# Have what is needed for volcano plots
+# Make a basic volcano plot
+# Make a results file first $2(Gene) | $4(log2fold) | $7(pval) | $8(padj) | $9(symbol) | $11-$13 (CS13 data), $14-$16 (CS15 data), $17-$19 (CS14 data), $20-$22 (CS17 data)
+# In terminal
+cd ~/ANALYSIS/RNA-seq/2017-10-24_human_cf/combined_data/tophat_pipeline/R_data
+cat CF_Tissue-CS17_v_CS13_diffexpr-results.csv | cut -d ',' -f 2,4,7-9,11-13,20-22 | tr -s ',' '\t' > CS17_CS13_results.txt
+sed -i 's/\"//g' CS17_CS13_results.txt 
+
+# set a threshold, require minimum average expression of 10 counts per sample
+# also intend to use these as background lists in DAVID pathway/GO analysis, as these lists represent all genes where p-value tests have been performed (the fold-changes may be inaccurate, but the padj should still be valid)
+# If doing all of this on the cluster, run R with X11 to view the graphs and tweak them. 
+
+cd /home/CAM/awilderman/ANALYSIS/RNA-seq/2017-10-24_human_cf/combined_data/tophat_pipeline/R_data
+grep "Gene" CS17_CS13_results.txt > CS17_CS13_bg_list.txt
+awk '{ if (($6 + $7 +$8 + $9 + $10 + $11 > 60)) { print } }' CS17_CS13_results.txt >> CS17_CS13_bg_list.txt
+
+# Follow the above example for all the comparisons you have. 
+# make a file namelist.txt that can be used to write the scripts used to make volcano plots
+# CS17_CS13	CS17_v_CS13	CS17_vs_CS13	CS17
+# etc.
+
+# Edit and run making_volcano_plots.sh
+
+# logout and then log in asking to use X11
+
+srun -N 1 -p general --ntasks=1 --x11=all xterm
+# should open an xterm window, in there use option+click to paste:
+cd ANALYSIS/RNA-seq/2017-10-24_human_cf/combined_data/tophat_pipeline/R_data/
+module load R/3.4.1
+Rscript --no-save --no-restore --verbose CF_compare_volcano_with_set60_lists.R > 2017-12-21_CF_volcano_and_lists_with_set60.Rout 2>&1
+
+
+# 11 # Generate lists of upregulated and downregulated genes in multiple comparisons
+
+# *_Sig_sorted list is not to be used as the background, it is all the genes with padj <0.01, then further divide
+# the list into upreg (log2FoldChange > 1) or downreg (log2FoldChange < -1)
+# making_volcano_plots.sh has the division to upreg and downreg lists included in it
+
+# Now you have lists to input into DAVID 
+
+
+ 

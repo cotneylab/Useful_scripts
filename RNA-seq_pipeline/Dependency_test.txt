@@ -1,0 +1,71 @@
+# Test scripts
+cd ~/TEST/DIR1
+FIRST=$(sbatch --parsable test_1.slurm)
+echo $FIRST
+SECOND=$(sbatch --parsable --dependency=afterok:$FIRST test_2.slurm)
+echo $SECOND
+cd ~/TEST/DIR2
+THIRD=$(sbatch --parsable --dependency=afterok:$SECOND test_3.slurm)
+echo $THIRD
+FOURTH=$(sbatch --parsable --dependency=afterok:$THIRD test_4.slurm)
+echo $FOURTH
+
+### ~/TEST/DIR1/test_1.slurm
+#!/bin/bash
+#SBATCH --job-name=test_1
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 1
+#SBATCH --partition=general
+#SBATCH --mail-type=BEGIN,END
+#SBATCH --mail-user=user@uchc.edu
+#SBATCH -o test_1_%j.out
+#SBATCH -e test_1_%j.err
+
+source ~/.bashrc
+echo "test 1" > ~/TEST/depend_test.out
+
+### ~/TEST/DIR1/test_2.slurm
+#!/bin/bash
+#SBATCH --job-name=test_2
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 1
+#SBATCH --partition=general
+#SBATCH --mail-type=BEGIN,END
+#SBATCH --mail-user=user@uchc.edu
+#SBATCH -o test_2_%j.out
+#SBATCH -e test_2_%j.err
+
+source ~/.bashrc
+echo "test 2" >> ~/TEST/depend_test.out
+
+### ~/TEST/DIR2/test_3.slurm
+#!/bin/bash
+#SBATCH --job-name=test_3
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 1
+#SBATCH --partition=general
+#SBATCH --mail-type=BEGIN,END
+#SBATCH --mail-user=user@uchc.edu
+#SBATCH -o test_3_%j.out
+#SBATCH -e test_3_%j.err
+
+source ~/.bashrc
+echo "test 3" >> ~/TEST/depend_test.out
+
+### ~/TEST/DIR2/test_4.slurm
+#!/bin/bash
+#SBATCH --job-name=test_4
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -c 1
+#SBATCH --partition=general
+#SBATCH --mail-type=BEGIN,END
+#SBATCH --mail-user=user@uchc.edu
+#SBATCH -o test_4_%j.out
+#SBATCH -e test_4_%j.err
+
+source ~/.bashrc
+echo "test 4" >> ~/TEST/depend_test.out
