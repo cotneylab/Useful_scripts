@@ -194,65 +194,39 @@ biocLite("calibrate")
 
 # Re-enter R
 
-# make the expression set with the counts file
-CFexprsFile <- "~/ANALYSIS/RNA-seq/<Project_name>/merged_cf/<counts_file>"
-
-CFexprs <- as.matrix(read.table(CFexprsFile, header=TRUE, sep="\t",
- row.names=1,
- as.is=TRUE))
-
-# check that it made what you expect 
-class(CFexprs)
-dim(CFexprs)
-colnames(CFexprs)
-head(CFexprs[,1:5])
-
-CFminimalSet <- ExpressionSet(assayData=CFexprs)
-
-CFpDataFile <- "~/ANALYSIS/RNA-seq/<Project_name>/merged_cf/phenodata.txt"
-CFpData <- read.table(CFpDataFile,
- row.names=1, header=TRUE, sep="\t")
-
-#check that it made what you expect
-dim(CFpData)
-rownames(CFpData)
-summary(CFpData)
-
-#check that the names are the same between expression data and pheno data
-all(rownames(CFpData)==colnames(CFexprs))
-
-# Turn the pData into phenoData
-
-CFmetadata <- data.frame(labelDescription=
- c("Carnegie stage",
- "Karyotype if known",
- "Institutional collection site",
- "RNA-seq batch"),
- row.names=c("Carnegie_Stage", "Karyotype", "Collection_Site", "Batch"))
-
-CFphenoData <- new("AnnotatedDataFrame",
- data=CFpData, varMetadata=CFmetadata)
-CFphenoData
-
-# build expression set with phenoData
-CFeSet <- ExpressionSet(assayData=CFexprs,
- phenoData=CFphenoData)
-
-head (CFeSet)
-
-CFminimalSet <- ExpressionSet(assayData=CFexprs)
-
-head (CFminimalSet)
-
 # # Estimate surrogate variables
 library(sva)
 library(pamr)
 library(limma)
 library(DESeq2)
 
-# the normalized data for sva (but what is this normalization?)
+# Use DESeq2 to create a matrix, normalize and transform the counts
+# in this example the biological variable of interest is the developmental stage (CS13, CS14, CS15, CS17)
+# there are three replicates of each
+# and is referred to in DESeq2 as the condition
+
+countsfile <- ("~/ANALYSIS/RNA-seq/2017-10-24_human_cf/combined_data/tophat_pipeline/R_data/reordered_CF_RNAseq_hg19_GCv10.txt")
+countdata <- read.table(countsfile, header=TRUE, row.names=1)
+
+# convert to matrix
+countdata <- as.matrix(countdata)
+head(countdata)
+
+# assign condition (if putting these in this order, the columns in the counts data have to be in this order, too.)
+condition <- factor(c(rep("CS13", 3), rep("CS15", 3), rep("CS14", 3), rep("CS17", 3)))
+
+(coldata <- data.frame(row.names=colnames(countdata), condition))
+
+# create the object
+ddsMat <- DESeqDataSetFromMatrix(countData = countdata,
+                                  colData = coldata,
+                                  design = ~ condition)
+ddsMat <- estimateSizeFactors(ddsMat)
+
+
+# the normalized counts data for sva (normalization done through DESeq2)
 # and take normalized counts for which the average across samples is >1
-# the known variable is condition (carnegie stage)
+# the biological variable of interest which makes up the model is condition (developmental stage)
 dat <- counts(ddsMat, normalized = TRUE)
 idx <- rowMeans(dat) > 1
 dat <- dat[idx,]
@@ -263,8 +237,13 @@ svseq <- svaseq(dat, mod, mod0)
 
 # outputs number of significant surrogate variables, use this information to edit CF_svseq.R
 
+# For more information on DESeq2, sva and integrating the svaseq with DESeq2 see the following references:
+# Love, M.I., Huber, W., Anders, S. Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2 Genome Biology 15(12):550 (2014)
+# Jeffrey T. Leek, W. Evan Johnson, Hilary S. Parker, Elana J. Fertig, Andrew E. Jaffe, John D. Storey, Yuqing Zhang and Leonardo Collado Torres (2017). sva: Surrogate Variable Analysis. R package version 3.24.4.
+# https://www.bioconductor.org/help/workflows/rnaseqGene/
+
 # 9 # Run DESeq2 on multiple comparisons
-# Edit CF_svseq.R
+# Edit CF_svseq.R with specific file names, condition names, number of replicates and number of surrogate variables
 #	as written it will plot three different normalization types: log2+1, vsd and rld
 #	Make heatmaps of Euclidean distances and Poisson distances
 #	and generate a PCA plot
