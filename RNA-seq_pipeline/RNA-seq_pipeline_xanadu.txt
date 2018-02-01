@@ -118,8 +118,11 @@ cd ~/ANALYSIS/RNA-seq/<Project_name>/ ; ls AWIL* | colrm 9 | sort | uniq > ~/DAT
 # The Illumina adapters are located in /isg/shared/apps/Trimmomatic/0.36/adapters
 
 # Edit and run script make_human_tophat_slurm.sh
-# Requires a GTF annotation file, mine is located in ~/TOOLS/bcbio/genomes/Hsapiens/hg19/annotation
-# Also requires a bowtie2 index, mine is located in ~/TOOLS/bcbio/genomes/Hsapiens/hg19/bowtie2
+# Requires a GTF annotation file, mine is located in ~/TOOLS/bcbio/genomes/Hsapiens/hg19/annotation, can be found at 
+# http://www.gencodegenes.org/releases/
+# Also requires a bowtie2 index, mine is located in ~/TOOLS/bcbio/genomes/Hsapiens/hg19/bowtie2, parts can be downloaded from 
+# http://hgdownload.soe.ucsc.edu/downloads.html to allow program to build index
+
 
 # Edit and run script make_samtools_fix_tag_slurm.sh
 # There are two options, run bamCoverage (only if DeepTools is able to run)
@@ -163,9 +166,12 @@ print "track type=bigWig name=\x22"$1"\x22 description=\x22"$1"\x22 bigDataUrl=h
 ## with bash, remove the .sorted.sam suffix from the sample names
 sed -i '' 's/.sorted.sam//g' nodot_sorted_counts_RNAseq_hg19_GCv10_2_fr.txt
 sed -i '' 's/.sorted.sam//g' new_joined_57epi_counts_RNAseq_hg19_GCv10_2rf.counts
-# 	either of these could be used as the counts file.  
-# 	In the example, nodot_sorted_counts_RNAseq_hg19_GCv10_2_fr.txt is the in-house data
-#	new_joined_57epi_counts_RNAseq_hg19_GCv10_2rf.counts is the in-house data joined to 57 epigenomes from Roadmap Epigenome
+# either of these could be used as the counts file. 
+# for some versions of sed command would be:
+# sed -i 's/.sorted.sam//g' nodot_sorted_counts_RNAseq_hg19_GCv10_2_fr.txt
+# sed -i 's/.sorted.sam//g' new_joined_57epi_counts_RNAseq_hg19_GCv10_2rf.counts
+# In the example, nodot_sorted_counts_RNAseq_hg19_GCv10_2_fr.txt is the in-house data
+# new_joined_57epi_counts_RNAseq_hg19_GCv10_2rf.counts is the in-house data joined to 57 epigenomes from Roadmap Epigenome
 
 # Make a phenodata.txt file with columns of sample information (in the example below, this is Carnegie stage, karyotype, etc)
 
@@ -195,12 +201,13 @@ biocLite("calibrate")
 # Re-enter R
 
 # # Estimate surrogate variables
+#Load Libraries
 library(sva)
 library(pamr)
 library(limma)
 library(DESeq2)
 
-# Use DESeq2 to create a matrix, normalize and transform the counts
+# Create a matrix with count data, then normalize and transform the counts using DESeq2
 # in this example the biological variable of interest is the developmental stage (CS13, CS14, CS15, CS17)
 # there are three replicates of each
 # and is referred to in DESeq2 as the condition
