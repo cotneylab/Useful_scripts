@@ -22,4 +22,4 @@ cp -r Projects/<Project_name>/Samples/<Sample_name> ~/DATA/RNA-seq/<Project_name
 
 cd ~
 basemount --unmount /tmp/user/basespace
-rm -r tmp/user/
+rm -r /tmp/user/
